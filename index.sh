@@ -1,5 +1,15 @@
 #!/bin/bash
 
+#Global variables
+greenColour="\e[0;32m\033[1m"
+endColour="\033[0m\e[0m"
+redColour="\e[0;31m\033[1m"
+blueColour="\e[0;34m\033[1m"
+yellowColour="\e[0;33m\033[1m"
+purpleColour="\e[0;35m\033[1m"
+turquoiseColour="\e[0;36m\033[1m"
+grayColour="\e[0;37m\033[1m"
+
 URL=$1
 WORDLIST=$2
 
@@ -23,6 +33,14 @@ lfi_attacks=(
     "php://filter/convert.iconv.utf-8.utf-16/resource=${lfi_filename}"
 )
 
+function help_panel(){
+
+    echo -e "\n${yellowColour}[!] Usage ${endColour}\n"
+    echo -e "\t[*] ${purpleColour}Fuzzing LIF Param: \n\n\t ${greenColour}lfibust${endColour} 'http://url/file.php?${redColour}FUZZ${endColour}=' ${blueColour}<WORDLIST_PATH>${endColour}\n\n"
+    echo -e "\t[*] ${purpleColour}Knowed Param: \n\n\t ${greenColour}lfibust${endColour} http://url/file.php?${redColour}param${endColour}= \n"
+    exit 1
+}
+help_panel
 
 function blacklist_test(){
 
@@ -53,6 +71,7 @@ function test_request(){
 }
 
 
+#Function to force a failed request in order to detect unwished status codes and lengths 
 function force_to_fail(){
     fail_var="dsfgdssssssd.."
     replace_url=$(echo -e $URL | sed "s/FUZZ/$fail_var/g")
